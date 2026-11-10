@@ -1,19 +1,36 @@
 package com.developerander.microservice.colegio.entity;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Data
 @Entity
-@Table (name = "matriculas")
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@Table(name = "matriculas")
 public class MatriEntity {
-        @Id
-        @GeneratedValue(strategy = GenerationType.IDENTITY)
-        private Long id;
-        private String nombreAlumno; // Para textos
-        private LocalDate fechaMatricula; // Para guardar fechas reales (ej: 2026-09-13)
-        private BigDecimal pagoTotal; // Para decimales exactos. En Java, el dinero SIEMPRE se maneja con BigDecimal, no con Double.
 
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @JsonAlias({"estudianteId", "idEstudiante"})
+    private Long estudianteId;
+
+    @JsonAlias({"estudianteDni", "dni"})
+    private String dni;
+
+    private String nombreAlumno;
+
+    private LocalDate fechaMatricula;
+
+    private BigDecimal pagoTotal;
 }
