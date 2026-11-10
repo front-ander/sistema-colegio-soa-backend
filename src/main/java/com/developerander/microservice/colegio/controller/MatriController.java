@@ -1,31 +1,29 @@
 package com.developerander.microservice.colegio.controller;
 
 import com.developerander.microservice.colegio.entity.MatriEntity;
-import com.developerander.microservice.colegio.repository.MatriRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.developerander.microservice.colegio.service.MatriculaService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
-@RequestMapping("api/matriculs")
+@RequestMapping({"/api/v1/matriculas", "/api/matriculs"})
+@RequiredArgsConstructor
 public class MatriController {
 
-    @Autowired
-    private MatriRepository matriRepository;
+    private final MatriculaService matriculaService;
 
     @GetMapping
-    @ResponseStatus(HttpStatus.OK)
-    public List <MatriEntity> getALLMatriculs() {
-        return matriRepository.findAll();
+    public ResponseEntity<List<MatriEntity>> getAllMatriculas() {
+        return ResponseEntity.ok(matriculaService.listarMatriculas());
     }
 
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED) // Devuelve un código 201 de "Creado"
-    public void createMatricula(@RequestBody MatriEntity matriEntity) {
-        matriRepository.save(matriEntity); // Esta es la magia que lo guarda en MySQL
+    public ResponseEntity<MatriEntity> createMatricula(@RequestBody MatriEntity matriEntity) {
+        MatriEntity nuevaMatricula = matriculaService.registrarMatricula(matriEntity);
+        return ResponseEntity.status(HttpStatus.CREATED).body(nuevaMatricula);
     }
 }
-
-
