@@ -1,5 +1,6 @@
 package com.developerander.microservice.colegio.exception;
 
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -7,104 +8,69 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
-// ══════════════════════════════════════════════════════════════════════
-// MANEJADOR GLOBAL DE EXCEPCIONES
-//
-// @RestControllerAdvice = Intercepta excepciones lanzadas por CUALQUIER
-// @RestController del proyecto y las convierte en respuestas JSON.
-//
-// Sin esto: Spring devuelve HTML de error (ugly, poco informativo)
-// Con esto:  Devuelve JSON estructurado con timestamp, código y mensaje
-//
-// Principio SOA: las respuestas de error también deben ser contratos
-// estables y documentados (mismo formato siempre)
-// ══════════════════════════════════════════════════════════════════════
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    // ── Método auxiliar: construye el cuerpo JSON estándar de error ───
-    private Map<String, Object> buildErrorBody(HttpStatus status, String error, String mensaje) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now().toString()); // Cuándo ocurrió el error
-        body.put("status", status.value());                    // Código HTTP numérico (422, 404...)
-        body.put("error", error);                              // Nombre del error
-        body.put("mensaje", mensaje);                          // Descripción legible
+    private Map<String, Object> buildErrorBody(String codigo, String mensaje, int status, String error) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("codigo", codigo);
+        body.put("mensaje", mensaje);
+        body.put("correlationId", MDC.get("correlationId"));
+        body.put("status", status);
+        body.put("error", error);
+        body.put("timestamp", LocalDateTime.now().toString());
         return body;
     }
 
-    // ── DEUDA PENDIENTE → 422 Unprocessable Entity ────────────────────
-    // 422 = La petición es sintácticamente válida pero no se puede procesar
-    // por una regla de negocio (el estudiante debe pagar primero)
+    @ExceptionHandler(ReglaNegocioException.class)
+    public ResponseEntity<Map<String, Object>> handleReglaNegocio(ReglaNegocioException ex) {
+        HttpStatus status = HttpStatus.resolve(ex.getHttpStatus());
+        if (status == null) status = HttpStatus.UNPROCESSABLE_ENTITY;
+
+        return ResponseEntity
+                .status(status)
+                .body(buildErrorBody(ex.getCodigo(), ex.getMessage(), status.value(), status.getReasonPhrase()));
+    }
+
     @ExceptionHandler(DeudaPendienteException.class)
     public ResponseEntity<Map<String, Object>> handleDeudaPendiente(DeudaPendienteException ex) {
         return ResponseEntity
-                .status(HttpStatus.UNPROCESSABLE_ENTITY)       // 422
-                .body(buildErrorBody(
-                        HttpStatus.UNPROCESSABLE_ENTITY,
-                        "Deuda Pendiente",
-                        ex.getMessage()
-                ));
+                .status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(buildErrorBody("ERR-RN01", ex.getMessage(), 422, "Unprocessable Entity"));
     }
 
-    // ── SIN VACANTES → 422 Unprocessable Entity ───────────────────────
     @ExceptionHandler(SinVacantesException.class)
     public ResponseEntity<Map<String, Object>> handleSinVacantes(SinVacantesException ex) {
         return ResponseEntity
-                .status(HttpStatus.UNPROCESSABLE_ENTITY)       // 422
-                .body(buildErrorBody(
-                        HttpStatus.UNPROCESSABLE_ENTITY,
-                        "Sin Vacantes",
-                        ex.getMessage()
-                ));
+                .status(HttpStatus.CONFLICT)
+                .body(buildErrorBody("ERR-RN02", ex.getMessage(), 409, "Conflict"));
     }
 
-    // ── RECURSO NO ENCONTRADO → 404 Not Found ─────────────────────────
     @ExceptionHandler(RecursoNoEncontradoException.class)
     public ResponseEntity<Map<String, Object>> handleRecursoNoEncontrado(RecursoNoEncontradoException ex) {
         return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)                  // 404
-                .body(buildErrorBody(
-                        HttpStatus.NOT_FOUND,
-                        "Recurso No Encontrado",
-                        ex.getMessage()
-                ));
+                .status(HttpStatus.NOT_FOUND)
+                .body(buildErrorBody("ERR-404", ex.getMessage(), 404, "Not Found"));
     }
 
-    // ── VALIDACIÓN (@Valid) → 400 Bad Request ─────────────────────────
-    // Se activa cuando @Valid detecta campos @NotNull vacíos u otras violaciones
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidacion(MethodArgumentNotValidException ex) {
-        // Recopila TODOS los errores de validación (puede haber varios campos inválidos)
         StringBuilder errores = new StringBuilder();
         ex.getBindingResult().getFieldErrors().forEach(error ->
-                errores.append(error.getField())             // Nombre del campo
-                       .append(": ")
-                       .append(error.getDefaultMessage())    // Mensaje del @NotNull, etc.
-                       .append("; ")
+                errores.append(error.getField()).append(": ").append(error.getDefaultMessage()).append("; ")
         );
-
         return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)               // 400
-                .body(buildErrorBody(
-                        HttpStatus.BAD_REQUEST,
-                        "Datos Inválidos",
-                        errores.toString()
-                ));
+                .status(HttpStatus.BAD_REQUEST)
+                .body(buildErrorBody("ERR-400", errores.toString(), 400, "Bad Request"));
     }
 
-    // ── ERROR GENÉRICO → 500 Internal Server Error ────────────────────
-    // Captura cualquier excepción no manejada específicamente
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGenerico(Exception ex) {
         return ResponseEntity
-                .status(HttpStatus.INTERNAL_SERVER_ERROR)      // 500
-                .body(buildErrorBody(
-                        HttpStatus.INTERNAL_SERVER_ERROR,
-                        "Error Interno",
-                        "Contacte al administrador: " + ex.getMessage()
-                ));
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(buildErrorBody("ERR-500", "Error interno: " + ex.getMessage(), 500, "Internal Server Error"));
     }
 }

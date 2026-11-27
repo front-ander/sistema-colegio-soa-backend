@@ -36,4 +36,7 @@ public interface MatriRepository extends JpaRepository<MatriEntity, UUID> {
     // → SELECT * FROM matricula WHERE id_estudiante = ?
     List<MatriEntity> findByIdEstudiante(UUID idEstudiante);
 
+    // Verifica si ya existe una matrícula activa (REGISTRADA) para ese estudiante en esa aula (Idempotencia)
+    boolean existsByIdEstudianteAndIdAulaAndEstado(UUID idEstudiante, UUID idAula, EstadoMatricula estado);
+
 }
