@@ -1,15 +1,15 @@
 package com.developerander.microservice.colegio.orchestrator;
 
-import com.developerander.microservice.colegio.client.AulaClient;
 import com.developerander.microservice.colegio.client.TesoreriaClient;
 import com.developerander.microservice.colegio.dto.DeudaResponse;
-import com.developerander.microservice.colegio.dto.VacanteResponse;
+import com.developerander.microservice.colegio.entity.Aula;
 import com.developerander.microservice.colegio.entity.EstadoMatricula;
 import com.developerander.microservice.colegio.entity.MatriEntity;
 import com.developerander.microservice.colegio.event.MatriculaEventPublisher;
 import com.developerander.microservice.colegio.event.MatriculaRegistradaEvent;
-import com.developerander.microservice.colegio.exception.DeudaPendienteException;
-import com.developerander.microservice.colegio.exception.SinVacantesException;
+import com.developerander.microservice.colegio.exception.RecursoNoEncontradoException;
+import com.developerander.microservice.colegio.exception.ReglaNegocioException;
+import com.developerander.microservice.colegio.repository.AulaRepository;
 import com.developerander.microservice.colegio.repository.MatriRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,129 +17,97 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-// ══════════════════════════════════════════════════════════════════════
-// ORQUESTADOR SOA: ProcesoMatricula
-//
-// Simula el motor de procesos BPMN de Flowable BPM.
-// Implementa el proceso "ProcesoMatricula" definido en el APF2.
-//
-// En producción: Flowable ejecuta este proceso como un archivo .bpmn
-// En el prototipo APF3: lo implementamos directamente en Java para
-// demostrar la lógica de orquestación SOA.
-//
-// TAREAS DEL PROCESO (en orden):
-//   Tarea 1 → Verificar deudas (TesoreriaService)
-//   Tarea 2 → Verificar vacantes (AulaService)
-//   Tarea 3 → Registrar matrícula (MatriRepository)
-//   Tarea 4 → Publicar evento (RabbitMQ → NotificacionService)
-//
-// Si alguna tarea falla → lanza excepción → GlobalExceptionHandler → HTTP 422
-// ══════════════════════════════════════════════════════════════════════
+import java.util.UUID;
+
 @Component
 public class ProcesoMatricula {
 
-    private static final Logger log = LoggerFactory.getLogger(ProcesoMatricula.class);
+        private static final Logger log = LoggerFactory.getLogger(ProcesoMatricula.class);
 
     @Autowired
-    private TesoreriaClient tesoreriaClient;    // Tarea 1: consulta deudas
+    private TesoreriaClient tesoreriaClient;
 
     @Autowired
-    private AulaClient aulaClient;              // Tarea 2: consulta vacantes
+    private AulaRepository aulaRepository;
 
     @Autowired
-    private MatriRepository matriRepository;    // Tarea 3: guarda en BD
+    private MatriRepository matriRepository;
 
     @Autowired
-    private MatriculaEventPublisher eventPublisher; // Tarea 4: publica evento
+    private MatriculaEventPublisher eventPublisher;
 
-    // ── MÉTODO PRINCIPAL: ejecuta el proceso completo ─────────────────
-    // @Transactional garantiza que si algo falla después del save(),
-    // se hace ROLLBACK automático en MySQL (consistencia de datos)
     @Transactional
     public MatriEntity ejecutar(MatriEntity matricula, String correlationId) {
 
-        log.info("🚀 [BPM] Iniciando ProcesoMatricula | CorrelationId: {}", correlationId);
+                log.info("🚀 [BPM] Iniciando ProcesoMatricula | CorrelationId: {}", correlationId);
 
-        // ══════════════════════════════════════════════════
-        // TAREA 1: VERIFICAR DEUDAS (Gateway exclusivo)
-        // ══════════════════════════════════════════════════
-        log.info("📋 [BPM - Tarea 1] Consultando deudas del estudiante: {}", matricula.getIdEstudiante());
+        // 1. Validar duplicados (Idempotencia)
+        if (matriRepository.existsByIdEstudianteAndIdAulaAndEstado(
+                matricula.getIdEstudiante(), matricula.getIdAula(), EstadoMatricula.REGISTRADA)) {
+            log.warn("❌ [ERR-DUP] El estudiante {} ya está matriculado en el aula {}",
+                    matricula.getIdEstudiante(), matricula.getIdAula());
+            throw new ReglaNegocioException("ERR-DUP",
+                    "El estudiante ya tiene una matrícula activa en esta aula", 409);
+        }
 
+        // 2. Validar vacantes con bloqueo pesimista (SELECT ... FOR UPDATE)
+        Aula aula = aulaRepository.findByIdForUpdate(matricula.getIdAula())
+                .orElseThrow(() -> new RecursoNoEncontradoException("Aula", "id", matricula.getIdAula()));
+
+        if (aula.getVacantes() <= 0) {
+            log.warn("❌ [ERR-RN02] Aula {} ({} {}) sin vacantes disponibles",
+                    aula.getIdAula(), aula.getGrado(), aula.getSeccion());
+            throw new ReglaNegocioException("ERR-RN02",
+                    "No hay vacantes disponibles en esta aula", 409);
+        }
+
+        // 3. Validar deudas reales en TesoreriaService (http://localhost:8081)
         DeudaResponse deuda = tesoreriaClient.consultarDeudas(matricula.getIdEstudiante());
-
         if (deuda != null && deuda.isTieneDeuda()) {
-            // Gateway de decisión: tiene deuda → proceso termina con error
-            log.warn("❌ [BPM - Tarea 1] Estudiante {} tiene {} deuda(s) por S/. {}",
-                    matricula.getIdEstudiante(),
-                    deuda.getCantidadDeudas(),
-                    deuda.getMontoTotal());
-
-            // La excepción viaja hasta GlobalExceptionHandler → HTTP 422
-            throw new DeudaPendienteException(
-                    String.format("El estudiante tiene %d deuda(s) pendiente(s) por S/. %.2f. " +
-                                  "Regularice su situación antes de matricularse.",
-                                  deuda.getCantidadDeudas(), deuda.getMontoTotal())
-            );
+            log.warn("❌ [ERR-RN01] Estudiante {} registra deuda pendiente en Tesorería",
+                    matricula.getIdEstudiante());
+            throw new ReglaNegocioException("ERR-RN01",
+                    "El estudiante registra deuda pendiente en Tesorería", 422);
         }
-        log.info("✅ [BPM - Tarea 1] Sin deudas. Continuando...");
 
-        // ══════════════════════════════════════════════════
-        // TAREA 2: VERIFICAR VACANTES (Gateway exclusivo)
-        // ══════════════════════════════════════════════════
-        log.info("📋 [BPM - Tarea 2] Consultando vacantes del aula: {}", matricula.getIdAula());
-
-        VacanteResponse vacante = aulaClient.consultarVacantes(matricula.getIdAula());
-
-        if (vacante != null && vacante.getVacantesDisponibles() <= 0) {
-            // Gateway de decisión: sin vacantes → proceso termina con error
-            log.warn("❌ [BPM - Tarea 2] Aula {} sin vacantes disponibles (capacidad: {}, matriculados: {})",
-                    matricula.getIdAula(),
-                    vacante != null ? vacante.getCapacidadMaxima() : "N/A",
-                    vacante != null ? vacante.getMatriculados() : "N/A");
-
-            throw new SinVacantesException(
-                    String.format("El aula '%s' no tiene vacantes disponibles (Capacidad: %d, Ocupadas: %d).",
-                                  vacante != null ? vacante.getNombreAula() : "seleccionada",
-                                  vacante != null ? vacante.getCapacidadMaxima() : 0,
-                                  vacante != null ? vacante.getMatriculados() : 0)
-            );
-        }
-        log.info("✅ [BPM - Tarea 2] Vacantes disponibles: {}. Continuando...",
-                vacante != null ? vacante.getVacantesDisponibles() : "N/A");
-
-        // ══════════════════════════════════════════════════
-        // TAREA 3: REGISTRAR MATRÍCULA EN BASE DE DATOS
-        // ══════════════════════════════════════════════════
-        log.info("📋 [BPM - Tarea 3] Registrando matrícula en MySQL...");
-
-        // Asigna el estado inicial (regla de negocio: toda matrícula nueva es REGISTRADA)
+        // 4. Generar cargo real en TesoreriaService antes de guardar la matrícula
+        UUID idCargoGenerado = tesoreriaClient.generarCargo(matricula.getIdEstudiante(), matricula.getIdCargo());
+        matricula.setIdCargo(idCargoGenerado);
         matricula.setEstado(EstadoMatricula.REGISTRADA);
 
-        // Persiste en MySQL → Hibernate genera: INSERT INTO matricula (...)
-        MatriEntity matriculaGuardada = matriRepository.save(matricula);
+        // 5. Persistir matrícula (con compensación Saga si falla o si simularFallo == true)
+        MatriEntity matriculaGuardada;
+        try {
+            if (matricula.isSimularFallo()) {
+                throw new RuntimeException("Fallo simulado en el registro de matrícula para probar compensación Saga");
+            }
+            matriculaGuardada = matriRepository.save(matricula);
+        } catch (Exception ex) {
+            log.error("💥 [SAGA] Error guardando matrícula. Ejecutando compensación en TesoreriaService para cargo {}",
+                    idCargoGenerado);
+            tesoreriaClient.anularCargo(idCargoGenerado, "Compensación automática por fallo en registro de matrícula");
+            throw new ReglaNegocioException("ERR-SAGA",
+                    "No se pudo completar el registro de matrícula; el cargo generado fue anulado por compensación", 422);
+        }
 
-        log.info("✅ [BPM - Tarea 3] Matrícula registrada con ID: {}", matriculaGuardada.getIdMatricula());
+        // 6. Descontar 1 vacante del aula y guardar en MySQL
+        aula.setVacantes(aula.getVacantes() - 1);
+        aulaRepository.save(aula);
+        log.info("🏫 [BD-AULAS] Vacante descontada. Aula {} ahora tiene {} vacante(s).",
+                aula.getIdAula(), aula.getVacantes());
 
-        // ══════════════════════════════════════════════════
-        // TAREA 4: PUBLICAR EVENTO ASÍNCRONO (Fire & Forget)
-        // ══════════════════════════════════════════════════
-        log.info("📋 [BPM - Tarea 4] Publicando evento a RabbitMQ...");
-
-        // Construye el evento con todos los datos necesarios para NotificacionService
+        // 7. Publicar evento asíncrono a RabbitMQ
         MatriculaRegistradaEvent evento = new MatriculaRegistradaEvent(
                 matriculaGuardada.getIdMatricula(),
                 matriculaGuardada.getIdEstudiante(),
                 matriculaGuardada.getFechaMatricula(),
                 matriculaGuardada.getEstado().name(),
-                correlationId,   // Para trazabilidad en los logs de NotificacionService
-                null             // timestamp lo agrega el publisher
+                correlationId,
+                null
         );
-
-        // Publica a RabbitMQ (asíncrono: no bloquea la respuesta al cliente)
         eventPublisher.publicarMatriculaRegistrada(evento);
 
-        log.info("🏁 [BPM] ProcesoMatricula completado exitosamente | CorrelationId: {}", correlationId);
-
-        return matriculaGuardada; // Devuelve la matrícula creada al controller
+        log.info("🏁 [BPM] ProcesoMatricula completado | ID: {}", matriculaGuardada.getIdMatricula());
+        return matriculaGuardada;
     }
 }

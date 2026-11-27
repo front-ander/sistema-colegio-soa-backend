@@ -50,11 +50,11 @@ public class MatriEntity {
     // @Enumerated(EnumType.STRING) = Guarda "REGISTRADA" o "ANULADA" en MySQL
     // Si usáramos EnumType.ORDINAL guardaría 0 o 1 (menos legible en la BD)
     @Enumerated(EnumType.STRING)
-    // ⚠️ SIN @NotNull aquí: el cliente NO envía estado en el POST.
-    // El MatriService lo asigna automáticamente como REGISTRADA antes de guardar.
-    // Si pusieramos @NotNull, la validación fallaría con 400 Bad Request
-    // porque @Valid valida ANTES de que el Service pueda asignar el valor.
     @Column(nullable = false)
     private EstadoMatricula estado;         // Estado: REGISTRADA o ANULADA (lo pone el Service)
+
+    // Campo transitorio (no se guarda en BD) para probar compensación Saga en desarrollo
+    @Transient
+    private boolean simularFallo = false;
 
 }

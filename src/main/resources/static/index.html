@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>I.E.P. Señor de los Milagros - Sistema de Matrícula (SIGA)</title>
+    <!-- Bootstrap 5.3 CSS Oficial -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f4f6f9;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #333;
+        }
+        .navbar-custom {
+            background-color: #1a365d;
+            border-bottom: 3px solid #c53030;
+        }
+        .card {
+            border: 1px solid #dce2e6;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .card-header-custom {
+            background-color: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+        .table thead th {
+            background-color: #f1f5f9;
+            font-size: 0.82rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #475569;
+        }
+        .uuid-code {
+            font-family: SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.8rem;
+            color: #0f5132;
+            background: #e8f5e9;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .breadcrumb-item a {
+            color: #1a365d;
+            text-decoration: none;
+        }
+        .footer-utp {
+            background: #fff;
+            border-top: 1px solid #e2e8f0;
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- NAVBAR INSTITUCIONAL -->
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-custom py-2">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+                <i class="bi bi-mortarboard-fill text-danger fs-4"></i>
+                <div>
+                    <span class="fw-bold d-block lh-1">I.E.P. SEÑOR DE LOS MILAGROS</span>
+                    <small class="text-white-50" style="font-size: 0.72rem;">Sechura, Piura • Sistema de Información y Gestión Académica (SIGA)</small>
+                </div>
+            </a>
+            
+            <div class="d-flex align-items-center gap-3">
+                <a href="/swagger-ui.html" target="_blank" class="btn btn-sm btn-outline-light d-flex align-items-center gap-1">
+                    <i class="bi bi-file-earmark-code"></i> Swagger Matrícula (8080)
+                </a>
+                <a href="http://localhost:8085/swagger-ui.html" target="_blank" class="btn btn-sm btn-outline-warning d-none d-md-flex align-items-center gap-1">
+                    <i class="bi bi-shield-lock"></i> Swagger Auth (8085)
+                </a>
+                <div id="userHeaderInfo" class="text-end text-white d-none border-start ps-3 border-secondary">
+                    <span class="d-block small fw-bold"><i class="bi bi-person-circle"></i> <span id="lblNombreUsuario">-</span></span>
+                    <div class="d-flex align-items-center justify-content-end gap-2">
+                        <span class="badge bg-info text-dark" style="font-size: 0.68rem;" id="lblRolUsuario">-</span>
+                        <button class="btn btn-link btn-sm text-warning p-0 text-decoration-none" style="font-size: 0.72rem;" onclick="cerrarSesion()">
+                            <i class="bi bi-box-arrow-right"></i> Salir
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- VISTA 1: LOGIN CONTRA AUTH-SERVICE (PUERTO 8085) -->
+    <div id="vistaLogin" class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-md-5">
+                <div class="card shadow-sm">
+                    <div class="card-header card-header-custom py-3 text-center">
+                        <i class="bi bi-shield-lock-fill text-primary fs-3 d-block mb-1"></i>
+                        <span class="fs-6">Acceso al Sistema SIGA (SOA Auth)</span>
+                        <div class="small text-muted fw-normal">Autenticación vía <code>auth-service:8085</code></div>
+                    </div>
+                    <div class="card-body p-4">
+                        <form id="formLogin" onsubmit="iniciarSesion(event)">
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Usuario</label>
+                                <input type="text" id="loginUser" class="form-control form-control-sm" value="secretaria" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Contraseña</label>
+                                <input type="password" id="loginPass" class="form-control form-control-sm" value="123456" required>
+                            </div>
+                            <div class="d-grid mb-3">
+                                <button type="submit" id="btnLogin" class="btn btn-primary btn-sm py-2 fw-semibold">
+                                    <i class="bi bi-box-arrow-in-right"></i> Iniciar Sesión y Obtener JWT
+                                </button>
+                            </div>
+                        </form>
+
+                        <div class="border-top pt-3">
+                            <div class="small text-muted mb-2 fw-semibold">Accesos rápidos de prueba (clave: <code>123456</code>):</div>
+                            <div class="d-flex flex-wrap gap-1">
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0" onclick="llenarLogin('secretaria')">secretaria</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0" onclick="llenarLogin('tesoreria')">tesoreria</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0" onclick="llenarLogin('docente')">docente</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0" onclick="llenarLogin('direccion')">direccion</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm py-0" onclick="llenarLogin('apoderado')">apoderado</button>
+                            </div>
+                        </div>
+
+                        <div id="loginAlerta" class="alert alert-danger small py-2 px-3 mt-3 d-none"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VISTA 2: PANEL PRINCIPAL DE MATRÍCULAS (PROTEGIDO CON JWT) -->
+    <div id="vistaDashboard" class="d-none">
+        <!-- SUB-BARRA / BREADCRUMB -->
+        <div class="bg-white border-bottom py-2">
+            <div class="container-fluid px-4 d-flex justify-content-between align-items-center">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-0 small">
+                        <li class="breadcrumb-item"><a href="#"><i class="bi bi-house"></i> Inicio</a></li>
+                        <li class="breadcrumb-item">Módulo Académico</li>
+                        <li class="breadcrumb-item active" aria-current="page">Registro de Matrículas 2026</li>
+                    </ol>
+                </nav>
+                <div class="small text-muted">
+                    <i class="bi bi-calendar3"></i> Año Lectivo 2026
+                </div>
+            </div>
+        </div>
+
+        <!-- CONTENIDO PRINCIPAL -->
+        <div class="container-fluid px-4 py-4">
+
+            <!-- ALERTA DE MEDIACIÓN ESB (TRAZABILIDAD + JWT) -->
+            <div class="alert alert-secondary py-2 px-3 d-flex flex-wrap justify-content-between align-items-center mb-4 small" role="alert">
+                <div>
+                    <i class="bi bi-diagram-3-fill text-primary me-1"></i>
+                    <strong>Trazabilidad SOA / ESB + JWT:</strong>
+                    <span class="text-muted ms-1">Peticiones autenticadas con Bearer Token y rastreadas con MDC:</span>
+                </div>
+                <div class="mt-1 mt-md-0 d-flex gap-2 align-items-center">
+                    <span class="badge bg-success"><i class="bi bi-shield-check"></i> JWT Activo</span>
+                    <span class="badge bg-dark font-monospace" id="txtCorrelationId">X-Correlation-ID: (Esperando...)</span>
+                </div>
+            </div>
+
+            <!-- TARJETAS DE RESUMEN ADMINISTRATIVO -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="text-muted small text-uppercase fw-semibold">Total de Registros</div>
+                                <h3 class="fw-bold mb-0 text-dark" id="numTotal">0</h3>
+                                <small class="text-muted">Estudiantes procesados</small>
+                            </div>
+                            <div class="p-3 bg-primary bg-opacity-10 text-primary rounded">
+                                <i class="bi bi-folder2-open fs-2"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="text-muted small text-uppercase fw-semibold">Matrículas Regulares</div>
+                                <h3 class="fw-bold mb-0 text-success" id="numRegistradas">0</h3>
+                                <small class="text-success">Con vacante y sin deuda</small>
+                            </div>
+                            <div class="p-3 bg-success bg-opacity-10 text-success rounded">
+                                <i class="bi bi-check-circle fs-2"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="text-muted small text-uppercase fw-semibold">Matrículas Anuladas</div>
+                                <h3 class="fw-bold mb-0 text-danger" id="numAnuladas">0</h3>
+                                <small class="text-muted">Bajas / cancelaciones</small>
+                            </div>
+                            <div class="p-3 bg-danger bg-opacity-10 text-danger rounded">
+                                <i class="bi bi-x-circle fs-2"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FILA DE TRABAJO: FORMULARIO Y LISTADO -->
+            <div class="row g-4">
+                
+                <!-- PANEL IZQUIERDO: FORMULARIO DE REGISTRO -->
+                <div class="col-lg-4">
+                    <div class="card">
+                        <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-pencil-square text-primary me-1"></i> Formulario de Matrícula</span>
+                            <span class="badge bg-light text-dark border">POST /api/v1/matriculas</span>
+                        </div>
+                        <div class="card-body">
+                            <form id="formRegistro" onsubmit="guardarMatricula(event)">
+                                
+                                <!-- SELECCIÓN DE ALUMNO (Coincide con init_soa_xampp.sql) -->
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold">Estudiante / Código UUID <span class="text-danger">*</span></label>
+                                    <select class="form-select form-select-sm mb-1" id="selectEstudiantePreset" onchange="seleccionarEstudiante(this.value)">
+                                        <option value="550e8400-e29b-41d4-a716-446655440001">García López, María Fernanda (DNI: 73215489 - Sin deuda)</option>
+                                        <option value="550e8400-e29b-41d4-a716-446655440002">Pérez Ramos, Juan Carlos (DNI: 74581290 - Sin deuda)</option>
+                                        <option value="550e8400-e29b-41d4-a716-446655440003">Silva Morales, Andrea Nicole (DNI: 76123498 - Con deuda RN-01)</option>
+                                        <option value="CUSTOM">-- Ingresar otro UUID manualmente --</option>
+                                    </select>
+                                    <input type="text" class="form-control form-control-sm font-monospace text-muted" id="txtIdEstudiante" 
+                                           value="550e8400-e29b-41d4-a716-446655440001" required>
+                                </div>
+
+                                <!-- CONCEPTO / CARGO -->
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold">Concepto de Matrícula (Tesorería) <span class="text-danger">*</span></label>
+                                    <select class="form-select form-select-sm mb-1" id="selectCargoPreset" onchange="seleccionarCargo(this.value)">
+                                        <option value="c0000000-0000-0000-0000-000000000001">Matrícula 2026 - S/. 300.00 (PAGADO)</option>
+                                        <option value="c0000000-0000-0000-0000-000000000002">Matrícula 2026 - S/. 300.00 (PENDIENTE)</option>
+                                    </select>
+                                    <input type="text" class="form-control form-control-sm font-monospace text-muted" id="txtIdCargo" 
+                                           value="c0000000-0000-0000-0000-000000000001" required>
+                                </div>
+
+                                <!-- AULA / VACANTE -->
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold">Aula / Grado y Sección <span class="text-danger">*</span></label>
+                                    <select class="form-select form-select-sm mb-1" id="selectAulaPreset" onchange="seleccionarAula(this.value)">
+                                        <option value="550e8400-e29b-41d4-a716-446655440013">5to Primaria - Sección "A" (10 vacantes)</option>
+                                        <option value="550e8400-e29b-41d4-a716-446655440011">3ro Primaria - Sección "A" (1 vacante - Concurrencia)</option>
+                                        <option value="550e8400-e29b-41d4-a716-446655440012">4to Primaria - Sección "B" (0 vacantes - RN-02)</option>
+                                    </select>
+                                    <input type="text" class="form-control form-control-sm font-monospace text-muted" id="txtIdAula" 
+                                           value="550e8400-e29b-41d4-a716-446655440013" required>
+                                </div>
+
+                                <!-- FECHA -->
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold">Fecha de Matrícula <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control form-control-sm" id="txtFechaMatricula" required>
+                                </div>
+
+                                <div class="d-grid gap-2 pt-2">
+                                    <button type="submit" class="btn btn-primary btn-sm py-2 fw-semibold" id="btnGuardar">
+                                        <i class="bi bi-save2"></i> Guardar Matrícula
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="generarAleatorios()">
+                                        <i class="bi bi-shuffle"></i> Generar nuevos UUIDs aleatorios
+                                    </button>
+                                </div>
+                            </form>
+
+                            <div id="msgAlerta" class="mt-3 d-none"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PANEL DERECHO: LISTADO Y CONSULTAS -->
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header card-header-custom d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-table text-primary"></i>
+                                <span>Registro Consolidado de Matrículas</span>
+                            </div>
+                            
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-primary active" id="filtroTodas" onclick="aplicarFiltro('TODAS')">Todas</button>
+                                <button type="button" class="btn btn-outline-primary" id="filtroReg" onclick="aplicarFiltro('REGISTRADA')">Registradas</button>
+                                <button type="button" class="btn btn-outline-primary" id="filtroAnul" onclick="aplicarFiltro('ANULADA')">Anuladas</button>
+                                <button type="button" class="btn btn-outline-secondary" title="Recargar tabla" onclick="cargarMatriculas()">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="card-body p-3">
+                            
+                            <div class="row mb-3 g-2">
+                                <div class="col-md-8">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                                        <input type="text" class="form-control" id="txtBuscar" 
+                                               placeholder="Buscar por UUID de matrícula o estudiante..." 
+                                               onkeyup="filtrarTabla(this.value)">
+                                    </div>
+                                </div>
+                                <div class="col-md-4 text-end">
+                                    <span class="text-muted small" id="lblContadorFiltrados">Mostrando todos los registros</span>
+                                </div>
+                            </div>
+
+                            <div class="table-responsive">
+                                <table class="table table-hover table-bordered table-sm mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 50px;" class="text-center">#</th>
+                                            <th>ID Matrícula (UUID)</th>
+                                            <th>ID Estudiante</th>
+                                            <th style="width: 105px;">Fecha</th>
+                                            <th style="width: 110px;" class="text-center">Estado</th>
+                                            <th style="width: 100px;" class="text-center">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tablaBody">
+                                        <tr>
+                                            <td colspan="6" class="text-center py-4 text-muted">
+                                                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                                Cargando información...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                        </div>
+                        <div class="card-footer bg-white border-top py-2 small text-muted d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-database-check text-success"></i> Conexión activa: <code>colegio_matricula_db</code> (MySQL XAMPP)</span>
+                            <span id="lblUltimaActualizacion">Actualizado: --:--:--</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- PIE DE PÁGINA UNIVERSITARIO -->
+    <footer class="footer-utp py-3 mt-5">
+        <div class="container-fluid px-4 text-center">
+            <p class="mb-1 fw-semibold text-secondary">
+                Facultad de Ingeniería • Carrera de Ingeniería de Sistemas e Informática
+            </p>
+            <p class="mb-0 text-muted" style="font-size: 0.8rem;">
+                Curso: Arquitectura Orientada a Servicios (SOA) • Avance 3 (APF3) • Docente: Mg. Kenky Rodríguez López
+            </p>
+        </div>
+    </footer>
+
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- LÓGICA JAVASCRIPT CONECTADA A AUTH-SERVICE (8085) + MATRICULA-SERVICE (8080) -->
+    <script>
+        const AUTH_URL = 'http://localhost:8085/api/v1/auth/login';
+        const ENDPOINT_MATRICULAS = '/api/v1/matriculas';
+
+        let registrosGlobales = [];
+        let estadoFiltroActual = 'TODAS';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('txtFechaMatricula').value = new Date().toISOString().split('T')[0];
+            verificarSesion();
+        });
+
+        function llenarLogin(usuario) {
+            document.getElementById('loginUser').value = usuario;
+            document.getElementById('loginPass').value = '123456';
+        }
+
+        function verificarSesion() {
+            const token = sessionStorage.getItem('jwt_token');
+            const nombre = sessionStorage.getItem('jwt_nombre');
+            const rol = sessionStorage.getItem('jwt_rol');
+
+            if (token) {
+                document.getElementById('vistaLogin').classList.add('d-none');
+                document.getElementById('vistaDashboard').classList.remove('d-none');
+                document.getElementById('userHeaderInfo').classList.remove('d-none');
+                document.getElementById('lblNombreUsuario').innerText = nombre || 'Usuario';
+                document.getElementById('lblRolUsuario').innerText = rol || 'ROL';
+                cargarMatriculas();
+            } else {
+                document.getElementById('vistaLogin').classList.remove('d-none');
+                document.getElementById('vistaDashboard').classList.add('d-none');
+                document.getElementById('userHeaderInfo').classList.add('d-none');
+            }
+        }
+
+        async function iniciarSesion(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btnLogin');
+            const alerta = document.getElementById('loginAlerta');
+            alerta.classList.add('d-none');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Autenticando...';
+
+            const payload = {
+                username: document.getElementById('loginUser').value.trim(),
+                password: document.getElementById('loginPass').value
+            };
+
+            try {
+                const res = await fetch(AUTH_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+
+                if (res.ok && data.token) {
+                    sessionStorage.setItem('jwt_token', data.token);
+                    sessionStorage.setItem('jwt_rol', data.rol);
+                    sessionStorage.setItem('jwt_nombre', data.nombre);
+                    verificarSesion();
+                } else {
+                    alerta.innerText = data.mensaje || 'Credenciales incorrectas.';
+                    alerta.classList.remove('d-none');
+                }
+            } catch (err) {
+                alerta.innerText = 'No se pudo conectar con auth-service (puerto 8085). Asegúrate de haberlo levantado.';
+                alerta.classList.remove('d-none');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> Iniciar Sesión y Obtener JWT';
+            }
+        }
+
+        function cerrarSesion() {
+            sessionStorage.clear();
+            verificarSesion();
+        }
+
+        function authHeaders(extra = {}) {
+            const token = sessionStorage.getItem('jwt_token');
+            return {
+                ...extra,
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            };
+        }
+
+        // 1. CARGAR LISTADO DE MATRÍCULAS (GET /api/v1/matriculas)
+        async function cargarMatriculas() {
+            try {
+                const res = await fetch(ENDPOINT_MATRICULAS, {
+                    headers: authHeaders()
+                });
+                capturarCorrelationId(res);
+
+                if (res.status === 401) {
+                    cerrarSesion();
+                    return;
+                }
+                if (!res.ok) throw new Error('Error HTTP ' + res.status);
+                registrosGlobales = await res.json();
+                
+                actualizarMetricas();
+                renderizarTabla();
+                document.getElementById('lblUltimaActualizacion').innerText = 'Actualizado: ' + new Date().toLocaleTimeString();
+            } catch (err) {
+                mostrarAlerta('No se pudo consultar el microservicio: ' + err.message, 'danger');
+            }
+        }
+
+        // 2. CREAR MATRÍCULA (POST /api/v1/matriculas)
+        async function guardarMatricula(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btnGuardar');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Procesando con BPM...';
+
+            const payload = {
+                idEstudiante: document.getElementById('txtIdEstudiante').value.trim(),
+                idCargo: document.getElementById('txtIdCargo').value.trim(),
+                idAula: document.getElementById('txtIdAula').value.trim(),
+                fechaMatricula: document.getElementById('txtFechaMatricula').value
+            };
+
+            try {
+                const res = await fetch(ENDPOINT_MATRICULAS, {
+                    method: 'POST',
+                    headers: authHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify(payload)
+                });
+                capturarCorrelationId(res);
+
+                if (res.status === 401) {
+                    cerrarSesion();
+                    return;
+                }
+
+                const data = await res.json();
+
+                if (res.status === 201) {
+                    mostrarAlerta(`<strong>Éxito (201):</strong> Matrícula registrada con ID: <code>${data.idMatricula}</code>`, 'success');
+                    cargarMatriculas();
+                } else {
+                    const cod = data.codigo ? `[${data.codigo}] ` : '';
+                    mostrarAlerta(`<strong>Rechazo (${res.status}):</strong> ${cod}${data.mensaje || data.error || 'No se pudo registrar'}`, 'danger');
+                }
+            } catch (err) {
+                mostrarAlerta('Error de comunicación con el backend: ' + err.message, 'danger');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-save2"></i> Guardar Matrícula';
+            }
+        }
+
+        // 3. ANULAR MATRÍCULA (PUT /api/v1/matriculas/{id})
+        async function anularMatricula(id) {
+            if (!confirm(`¿Confirma que desea anular la matrícula con ID:\n${id}?`)) return;
+
+            const actual = registrosGlobales.find(r => r.idMatricula === id);
+            if (!actual) return;
+
+            const payloadModificado = { ...actual, estado: 'ANULADA' };
+
+            try {
+                const res = await fetch(`${ENDPOINT_MATRICULAS}/${id}`, {
+                    method: 'PUT',
+                    headers: authHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify(payloadModificado)
+                });
+                capturarCorrelationId(res);
+
+                if (res.status === 401) {
+                    cerrarSesion();
+                    return;
+                }
+
+                if (res.ok) {
+                    mostrarAlerta(`Matrícula <code>${id}</code> cambiada a estado ANULADA.`, 'info');
+                    cargarMatriculas();
+                } else {
+                    mostrarAlerta('No se pudo anular la matrícula seleccionada.', 'danger');
+                }
+            } catch (err) {
+                mostrarAlerta('Error de red: ' + err.message, 'danger');
+            }
+        }
+
+        // 4. ELIMINAR MATRÍCULA (DELETE /api/v1/matriculas/{id})
+        async function eliminarMatricula(id) {
+            if (!confirm(`¿ATENCIÓN: Desea eliminar físicamente de la base de datos el registro:\n${id}?`)) return;
+
+            try {
+                const res = await fetch(`${ENDPOINT_MATRICULAS}/${id}`, {
+                    method: 'DELETE',
+                    headers: authHeaders()
+                });
+                capturarCorrelationId(res);
+
+                if (res.status === 401) {
+                    cerrarSesion();
+                    return;
+                }
+
+                if (res.status === 204 || res.ok) {
+                    mostrarAlerta(`Registro <code>${id}</code> eliminado correctamente.`, 'secondary');
+                    cargarMatriculas();
+                } else {
+                    mostrarAlerta('No se pudo eliminar el registro.', 'danger');
+                }
+            } catch (err) {
+                mostrarAlerta('Error al eliminar: ' + err.message, 'danger');
+            }
+        }
+
+        function renderizarTabla(lista = null) {
+            const tbody = document.getElementById('tablaBody');
+            let datos = lista !== null ? lista : registrosGlobales;
+
+            if (estadoFiltroActual !== 'TODAS') {
+                datos = datos.filter(d => d.estado === estadoFiltroActual);
+            }
+
+            document.getElementById('lblContadorFiltrados').innerText = `Mostrando ${datos.length} de ${registrosGlobales.length} registros`;
+
+            if (datos.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center py-4 text-muted small">
+                            No se encontraron matrículas con el filtro seleccionado.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = datos.map((m, idx) => {
+                const esReg = m.estado === 'REGISTRADA';
+                const badge = esReg 
+                    ? '<span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1"><i class="bi bi-check-lg"></i> REGISTRADA</span>'
+                    : '<span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1"><i class="bi bi-x-lg"></i> ANULADA</span>';
+
+                return `
+                    <tr>
+                        <td class="text-center text-muted small">${idx + 1}</td>
+                        <td><span class="uuid-code" title="${m.idMatricula}">${m.idMatricula}</span></td>
+                        <td><small class="font-monospace text-secondary" title="${m.idEstudiante}">${m.idEstudiante.substring(0, 18)}...</small></td>
+                        <td><small>${m.fechaMatricula}</small></td>
+                        <td class="text-center">${badge}</td>
+                        <td class="text-center">
+                            <div class="btn-group btn-group-sm">
+                                ${esReg ? `
+                                    <button class="btn btn-outline-warning text-dark py-0 px-2" title="Anular matrícula" onclick="anularMatricula('${m.idMatricula}')">
+                                        <i class="bi bi-slash-circle"></i>
+                                    </button>
+                                ` : ''}
+                                <button class="btn btn-outline-danger py-0 px-2" title="Eliminar registro" onclick="eliminarMatricula('${m.idMatricula}')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function filtrarTabla(query) {
+            const texto = query.toLowerCase().trim();
+            if (!texto) {
+                renderizarTabla();
+                return;
+            }
+            const filtrados = registrosGlobales.filter(r => 
+                (r.idMatricula && r.idMatricula.toLowerCase().includes(texto)) ||
+                (r.idEstudiante && r.idEstudiante.toLowerCase().includes(texto))
+            );
+            renderizarTabla(filtrados);
+        }
+
+        function aplicarFiltro(estado) {
+            estadoFiltroActual = estado;
+            document.getElementById('filtroTodas').classList.remove('active');
+            document.getElementById('filtroReg').classList.remove('active');
+            document.getElementById('filtroAnul').classList.remove('active');
+
+            if (estado === 'TODAS') document.getElementById('filtroTodas').classList.add('active');
+            if (estado === 'REGISTRADA') document.getElementById('filtroReg').classList.add('active');
+            if (estado === 'ANULADA') document.getElementById('filtroAnul').classList.add('active');
+
+            renderizarTabla();
+        }
+
+        function actualizarMetricas() {
+            document.getElementById('numTotal').innerText = registrosGlobales.length;
+            document.getElementById('numRegistradas').innerText = registrosGlobales.filter(r => r.estado === 'REGISTRADA').length;
+            document.getElementById('numAnuladas').innerText = registrosGlobales.filter(r => r.estado === 'ANULADA').length;
+        }
+
+        function capturarCorrelationId(res) {
+            const corr = res.headers.get('X-Correlation-ID');
+            if (corr) {
+                document.getElementById('txtCorrelationId').innerText = 'X-Correlation-ID: ' + corr;
+            }
+        }
+
+        function mostrarAlerta(html, tipo) {
+            const div = document.getElementById('msgAlerta');
+            div.className = `alert alert-${tipo} alert-dismissible fade show small py-2 px-3 mt-3`;
+            div.innerHTML = `
+                ${html}
+                <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+            div.classList.remove('d-none');
+        }
+
+        function seleccionarEstudiante(val) {
+            if (val !== 'CUSTOM') document.getElementById('txtIdEstudiante').value = val;
+        }
+        function seleccionarCargo(val) {
+            document.getElementById('txtIdCargo').value = val;
+        }
+        function seleccionarAula(val) {
+            document.getElementById('txtIdAula').value = val;
+        }
+
+        function generarAleatorios() {
+            const gen = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+            document.getElementById('txtIdEstudiante').value = gen();
+            document.getElementById('txtIdCargo').value = gen();
+            document.getElementById('txtIdAula').value = gen();
+            document.getElementById('selectEstudiantePreset').value = 'CUSTOM';
+        }
+    </script>
+</body>
+</html>

@@ -43,6 +43,7 @@ import java.util.UUID;
 // @Tag = Agrupa estos endpoints en Swagger UI bajo el nombre "Matrículas"
 // ══════════════════════════════════════════════════════════════════════
 @RestController
+@CrossOrigin(origins = "*")         // Permite peticiones desde el frontend (CORS habilitado)
 // Versionado de API según estándar APF2 Tabla 14: prefijo /api/v1/
 // Versionar la ruta permite evolucionar la API sin romper clientes existentes.
 // v1 = primera versión pública del servicio de matrículas.
